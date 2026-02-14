@@ -1,0 +1,12 @@
+{
+    "rewrites": [
+        {
+            "source": "/api/:path*",
+            "destination": "https://api.bling.com.br/Api/v3/:path*"
+        },
+        {
+            "source": "/oauth/:path*",
+            "destination": "https://bling.com.br/Api/v3/oauth/:path*"
+        }
+    ]
+}
