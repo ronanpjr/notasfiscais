@@ -1,3 +1,5 @@
+import { throttledFetch } from './apiThrottle.js';
+
 const API_BASE = '/api';
 const OAUTH_BASE = '/oauth';
 
@@ -19,7 +21,7 @@ export async function exchangeCodeForToken(code, clientId, clientSecret, redirec
         redirect_uri: redirectUri,
     });
 
-    const res = await fetch(`${OAUTH_BASE}/token`, {
+    const res = await throttledFetch(`${OAUTH_BASE}/token`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
@@ -41,7 +43,7 @@ export async function refreshAccessToken(refreshToken, clientId, clientSecret) {
         refresh_token: refreshToken,
     });
 
-    const res = await fetch(`${OAUTH_BASE}/token`, {
+    const res = await throttledFetch(`${OAUTH_BASE}/token`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
@@ -87,6 +89,8 @@ export function buildPayload({ contato, naturezaOperacaoId, quantidade, valorUni
 
     const observacoes = `Operação tributada nos termos do art 296 da parte 1 do Anexo VIII do RICMS e o valor acrescentado à operação a título de incentivo à produção e à industrialização do leite 2,5% retenções federais FUNRURAL 1,5% base de cálculo (valor dos produtos) * 1,5% = R$ ${formatCurrency(funrural)}`;
 
+    const addr = contato.endereco?.geral || {};
+
     return {
         tipo: 0,
         numero: "0",
@@ -97,9 +101,19 @@ export function buildPayload({ contato, naturezaOperacaoId, quantidade, valorUni
         contato: {
             id: contato.id,
             nome: contato.nome,
-            tipoPessoa: 'F',
+            tipoPessoa: contato.tipo || 'F',
             numeroDocumento: (contato.numeroDocumento || '').replace(/\D/g, ''),
-            contribuinte: 1,
+            contribuinte: contato.indicadorIe || 1,
+            ie: contato.ie || '',
+            endereco: {
+                endereco: addr.endereco || '',
+                numero: addr.numero || '',
+                complemento: addr.complemento || '',
+                bairro: addr.bairro || '',
+                cep: (addr.cep || '').replace(/\D/g, ''),
+                municipio: addr.municipio || '',
+                uf: addr.uf || '',
+            },
         },
         despesas,
         itens: [
@@ -125,7 +139,7 @@ import { mockCriarNfe, mockListarNfe, mockObterNfe, mockEnviarNfe } from './mock
 const IS_DEMO = (token) => token === 'DEMO_MODE';
 
 async function apiFetch(token, path, options = {}) {
-    const res = await fetch(`${API_BASE}${path}`, {
+    const res = await throttledFetch(`${API_BASE}${path}`, {
         ...options,
         headers: {
             'Content-Type': 'application/json',
@@ -151,10 +165,12 @@ export function criarNfe(token, payload) {
     });
 }
 
-export function listarNfe(token, { pagina = 1, limite = 100, situacao, tipo = 0 } = {}) {
+export function listarNfe(token, { pagina = 1, limite = 100, situacao, tipo = 0, dataInicial, dataFinal } = {}) {
     if (IS_DEMO(token)) return mockListarNfe({ pagina, limite });
     const params = new URLSearchParams({ pagina, limite, tipo });
     if (situacao) params.set('situacao', situacao);
+    if (dataInicial) params.set('dataEmissaoInicial', `${dataInicial} 00:00:00`);
+    if (dataFinal) params.set('dataEmissaoFinal', `${dataFinal} 23:59:59`);
     return apiFetch(token, `/nfe?${params}`);
 }
 
@@ -166,6 +182,13 @@ export function obterNfe(token, id) {
 export function enviarNfe(token, id) {
     if (IS_DEMO(token)) return mockEnviarNfe(id);
     return apiFetch(token, `/nfe/${id}/enviar`, { method: 'POST' });
+}
+
+export function obterContato(token, id) {
+    if (IS_DEMO(token)) {
+        return Promise.resolve({ data: { id, nome: 'Produtor Demo', ie: '1234567890' } });
+    }
+    return apiFetch(token, `/contatos/${id}`);
 }
 
 export function listarContatos(token, { pagina = 1, limite = 100, pesquisa, tipoPessoa } = {}) {
@@ -186,6 +209,12 @@ export function listarContatos(token, { pagina = 1, limite = 100, pesquisa, tipo
     return apiFetch(token, `/contatos?${params}`);
 }
 
+// ─── Naturezas Cache ──────────────────────────────────────
+// Naturezas de operação rarely change, so we cache them for
+// the lifetime of the page to avoid redundant API calls.
+let _naturezasCache = null;
+let _naturezasCacheToken = null;
+
 export function listarNaturezas(token, { pagina = 1, limite = 100, situacao = 1 } = {}) {
     if (IS_DEMO(token)) {
         return Promise.resolve({
@@ -196,6 +225,14 @@ export function listarNaturezas(token, { pagina = 1, limite = 100, situacao = 1 
             ]
         });
     }
+    // Return cached result if available for the same token
+    if (_naturezasCache && _naturezasCacheToken === token) {
+        return Promise.resolve(_naturezasCache);
+    }
     const params = new URLSearchParams({ pagina, limite, situacao });
-    return apiFetch(token, `/naturezas-operacoes?${params}`);
+    return apiFetch(token, `/naturezas-operacoes?${params}`).then((res) => {
+        _naturezasCache = res;
+        _naturezasCacheToken = token;
+        return res;
+    });
 }

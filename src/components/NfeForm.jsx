@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { FilePlus, BarChart3, Save, Search, ChevronDown } from 'lucide-react';
-import { calcular, buildPayload, criarNfe, listarContatos, listarNaturezas } from '../nfeService.js';
+import { calcular, buildPayload, criarNfe, listarContatos, listarNaturezas, obterContato } from '../nfeService.js';
 
 function fmt(v) {
     return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -12,6 +12,7 @@ export default function NfeForm({ token, onSuccess, onError }) {
     const [loadingContatos, setLoadingContatos] = useState(false);
     const [loadingNaturezas, setLoadingNaturezas] = useState(false);
     const [search, setSearch] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
     const [selectedContato, setSelectedContato] = useState(null);
     const [selectedNatureza, setSelectedNatureza] = useState(null);
     const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -25,22 +26,30 @@ export default function NfeForm({ token, onSuccess, onError }) {
     const calc = useMemo(() => calcular(qtd, vlr), [qtd, vlr]);
     const hasValues = qtd > 0 && vlr > 0;
 
-    // Fetch contacts and naturezas on mount
+    // Debounce search input
+    useEffect(() => {
+        const timer = setTimeout(() => setDebouncedSearch(search), 500);
+        return () => clearTimeout(timer);
+    }, [search]);
+
+    // Fetch contacts from API when search changes
     useEffect(() => {
         if (!token) return;
-
         setLoadingContatos(true);
-        listarContatos(token, { limite: 200 })
+        listarContatos(token, { limite: 100, pesquisa: debouncedSearch || undefined })
             .then((res) => setContatos(res.data || []))
             .catch(() => onError('Erro ao carregar contatos'))
             .finally(() => setLoadingContatos(false));
+    }, [token, debouncedSearch]);
 
+    // Fetch naturezas on mount
+    useEffect(() => {
+        if (!token) return;
         setLoadingNaturezas(true);
         listarNaturezas(token)
             .then((res) => {
                 const list = res.data || [];
                 setNaturezas(list);
-                // Auto-select "Compra de mercadorias" or the padrao=2 (padrão compra)
                 const compra = list.find(n =>
                     n.descricao?.toLowerCase().includes('compra de mercadoria') || n.padrao === 2
                 );
@@ -61,19 +70,20 @@ export default function NfeForm({ token, onSuccess, onError }) {
         return () => document.removeEventListener('mousedown', handleClick);
     }, []);
 
-    const filtered = useMemo(() => {
-        if (!search) return contatos;
-        const q = search.toLowerCase();
-        return contatos.filter(c =>
-            c.nome?.toLowerCase().includes(q) ||
-            c.numeroDocumento?.includes(q)
-        );
-    }, [contatos, search]);
+    // Contacts are already filtered by the API via pesquisa param
+    const filtered = contatos;
 
-    function selectContato(c) {
+    async function selectContato(c) {
         setSelectedContato(c);
         setSearch('');
         setDropdownOpen(false);
+        // Fetch full contact data to get address
+        try {
+            const res = await obterContato(token, c.id);
+            if (res?.data) {
+                setSelectedContato({ ...c, ...res.data });
+            }
+        } catch { /* keep basic contact data */ }
     }
 
     async function handleSubmit(e) {
@@ -82,12 +92,24 @@ export default function NfeForm({ token, onSuccess, onError }) {
 
         setLoading(true);
         try {
+            // Always fetch full contact data to guarantee address + IE
+            let fullContato = selectedContato;
+            try {
+                const cRes = await obterContato(token, selectedContato.id);
+                if (cRes?.data) {
+                    fullContato = { ...selectedContato, ...cRes.data };
+                }
+            } catch (err) {
+                /* proceed with what we have */
+            }
+
             const payload = buildPayload({
-                contato: selectedContato,
+                contato: fullContato,
                 naturezaOperacaoId: selectedNatureza.id,
                 quantidade: qtd,
                 valorUnitario: vlr,
             });
+            console.log('[NfeForm] Payload contato.endereco:', JSON.stringify(payload.contato.endereco));
             await criarNfe(token, payload);
             setSelectedContato(null);
             setQuantidade('');

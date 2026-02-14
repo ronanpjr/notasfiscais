@@ -91,32 +91,27 @@ function fmtDate(dateStr) {
     }
 }
 
-export function mapNotaToRow(nota, detail) {
+export function mapNotaToRow(nota, detail, contatoIe = '') {
     const d = detail || {};
     const n = nota || {};
 
-    // Try to get item-level data
+    // Bling API: itens[].quantidade, itens[].valor (unit price), itens[].valorTotal (readOnly total)
     const items = d.itens || n.itens || [];
     const firstItem = items[0] || {};
     const quantidade = firstItem.quantidade || 0;
-    const valorUnitario = firstItem.valor || firstItem.valorUnitario || firstItem.preco || 0;
 
-    // Calculate totalProdutos from items, or derive from valorNota
-    let totalProdutos = 0;
-    if (items.length > 0) {
-        // Sum all items: qty * unit price
-        totalProdutos = items.reduce((sum, item) => {
-            const qty = item.quantidade || 0;
-            const val = item.valor || item.valorUnitario || item.preco || 0;
-            return sum + round2(qty * val);
-        }, 0);
-    }
-    // Fallback: try direct fields
-    if (!totalProdutos) {
-        totalProdutos = d.totalProdutos ?? n.totalProdutos ?? 0;
-    }
-    // Last resort: derive from valorNota (valorNota = totalProdutos * 1.025)
+    // Calculate totalProdutos by summing item.valorTotal (or qty * unit price as fallback)
+    let totalProdutos = items.reduce((sum, item) => {
+        // Prefer valorTotal (computed by Bling), fallback to valor * quantidade
+        const itemTotal = item.valorTotal || ((item.valor || 0) * (item.quantidade || 0));
+        return sum + itemTotal;
+    }, 0);
+    totalProdutos = round2(totalProdutos);
+
+    // Bling API: valorNota at the NFe level
     const valorNota = d.valorNota ?? n.valorNota ?? 0;
+
+    // Last resort: derive from valorNota if items gave nothing
     if (!totalProdutos && valorNota) {
         totalProdutos = round2(valorNota / 1.025);
     }
@@ -124,19 +119,12 @@ export function mapNotaToRow(nota, detail) {
     const incentivo = round2(totalProdutos * 0.025);
     const icms = round2(totalProdutos * 0.12);
 
-    // Debug: log the detail structure to help diagnose field names
-    if (detail) {
-        console.log('[SheetsExport] NFe detail keys:', Object.keys(detail));
-        console.log('[SheetsExport] First item keys:', Object.keys(firstItem));
-        console.log('[SheetsExport] totalProdutos:', totalProdutos, 'valorNota:', valorNota);
-    }
-
     return [
-        d.contato?.ie || d.contato?.inscricaoEstadual || n.contato?.ie || '',  // CD_PRODUTOR_IE
+        contatoIe || d.contato?.ie || n.contato?.ie || '',                     // CD_PRODUTOR_IE
         fmtDate(d.dataEmissao || n.dataEmissao),                               // DT_NF
         d.numero || n.numero || '',                                             // NR_NF
-        d.serie || n.serie || '',                                               // CD_SERIE
-        d.chaveAcesso || '',                                                    // CD_CHAVE
+        d.serie ?? n.serie ?? '',                                               // CD_SERIE
+        d.chaveAcesso || n.chaveAcesso || '',                                    // CD_CHAVE
         'L',                                                                    // FL_RESPONSABILIDADE
         quantidade,                                                             // QT_LITROS
         valorNota,                                                              // VR_TOTAL
@@ -176,5 +164,73 @@ export async function appendRows(accessToken, spreadsheetId, rows, sheetName = '
         throw new Error(`Erro Google Sheets: ${msg}`);
     }
 
-    return res.json();
+    const result = await res.json();
+
+    // Force white background on the appended range
+    try {
+        const updatedRange = result?.updates?.updatedRange;
+        if (updatedRange) {
+            await setWhiteBackground(accessToken, spreadsheetId, sheetName, updatedRange);
+        }
+    } catch {
+        // Formatting is best-effort, don't fail the export
+    }
+
+    return result;
+}
+
+async function getSheetId(accessToken, spreadsheetId, sheetName) {
+    const url = `${SHEETS_API}/${spreadsheetId}?fields=sheets.properties`;
+    const res = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${accessToken}` },
+    });
+    if (!res.ok) return 0;
+    const data = await res.json();
+    const sheet = data?.sheets?.find(s => s.properties?.title === sheetName);
+    return sheet?.properties?.sheetId ?? 0;
+}
+
+function parseRange(rangeStr) {
+    // e.g. "Sheet1!A2:N15" -> { startRow: 1, endRow: 15, startCol: 0, endCol: 14 }
+    const cellPart = rangeStr.includes('!') ? rangeStr.split('!')[1] : rangeStr;
+    const [startCell, endCell] = cellPart.split(':');
+    const colToNum = (c) => {
+        let n = 0;
+        for (const ch of c) n = n * 26 + ch.charCodeAt(0) - 64;
+        return n - 1;
+    };
+    const parse = (cell) => {
+        const m = cell.match(/^([A-Z]+)(\d+)$/);
+        return m ? { col: colToNum(m[1]), row: parseInt(m[2], 10) - 1 } : { col: 0, row: 0 };
+    };
+    const s = parse(startCell);
+    const e = endCell ? parse(endCell) : s;
+    return { startRow: s.row, startCol: s.col, endRow: e.row + 1, endCol: e.col + 1 };
+}
+
+async function setWhiteBackground(accessToken, spreadsheetId, sheetName, updatedRange) {
+    const sheetId = await getSheetId(accessToken, spreadsheetId, sheetName);
+    const { startRow, startCol, endRow, endCol } = parseRange(updatedRange);
+
+    const url = `${SHEETS_API}/${spreadsheetId}:batchUpdate`;
+    await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            requests: [{
+                repeatCell: {
+                    range: { sheetId, startRowIndex: startRow, endRowIndex: endRow, startColumnIndex: startCol, endColumnIndex: endCol },
+                    cell: {
+                        userEnteredFormat: {
+                            backgroundColor: { red: 1, green: 1, blue: 1 },
+                        },
+                    },
+                    fields: 'userEnteredFormat.backgroundColor',
+                },
+            }],
+        }),
+    });
 }

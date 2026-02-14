@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { Sheet, Loader2, CheckCircle2, Settings, Link2, Download } from 'lucide-react';
-import { listarNfe, obterNfe } from '../nfeService.js';
+import { listarNfe, obterNfe, obterContato } from '../nfeService.js';
 import {
     loadGisScript,
     getAccessToken,
@@ -26,7 +26,7 @@ export default function SheetsExport({ token, showToast }) {
     const [exporting, setExporting] = useState(false);
     const [progress, setProgress] = useState(null);
     const [previewRows, setPreviewRows] = useState(null);
-    const [includeHeader, setIncludeHeader] = useState(true);
+    const [includeHeader, setIncludeHeader] = useState(false);
     const [sheetName, setSheetName] = useState(() => getStored('sheets_tab_name', ''));
     const abortRef = useRef(false);
 
@@ -69,6 +69,7 @@ export default function SheetsExport({ token, showToast }) {
         setProgress({ step: 'Carregando detalhes...', current: 0, total: allNotas.length });
 
         const rows = [];
+        const contatoCache = {}; // Cache IE by contact id
         for (let i = 0; i < allNotas.length; i++) {
             if (abortRef.current) throw new Error('Exportação cancelada.');
 
@@ -80,7 +81,23 @@ export default function SheetsExport({ token, showToast }) {
             } catch {
                 // If we can't get detail, use nota data only
             }
-            rows.push(mapNotaToRow(nota, detail));
+
+            // Fetch contact IE if not cached
+            const contatoId = detail?.contato?.id || nota?.contato?.id;
+            let contatoIe = '';
+            if (contatoId) {
+                if (contatoCache[contatoId] !== undefined) {
+                    contatoIe = contatoCache[contatoId];
+                } else {
+                    try {
+                        const cRes = await obterContato(token, contatoId);
+                        contatoIe = cRes?.data?.ie || '';
+                    } catch { /* ignore */ }
+                    contatoCache[contatoId] = contatoIe;
+                }
+            }
+
+            rows.push(mapNotaToRow(nota, detail, contatoIe));
             setProgress({ step: 'Carregando detalhes...', current: i + 1, total: allNotas.length });
         }
 

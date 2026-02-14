@@ -145,7 +145,6 @@ export default function NfeList({ token, showToast }) {
                                             <tr className={isExpanded ? 'row-expanded' : ''}>
                                                 <td className="td-numero">
                                                     <strong>{nota.numero || '—'}</strong>
-                                                    <small className="td-serie">Série {nota.serie || '—'}</small>
                                                 </td>
                                                 <td>{nota.dataEmissao ? new Date(nota.dataEmissao).toLocaleDateString('pt-BR') : '—'}</td>
                                                 <td>{nota.contato?.nome || nota.contato?.id || '—'}</td>
@@ -180,7 +179,7 @@ export default function NfeList({ token, showToast }) {
                                                             <div className="detail-panel">
                                                                 <div className="detail-grid">
                                                                     <div><strong>ID:</strong> {detail.id}</div>
-                                                                    <div><strong>Chave de Acesso:</strong> <code>{detail.chaveAcesso || '—'}</code></div>
+                                                                    <div><strong>Série:</strong> {detail.serie ?? '—'}</div>
                                                                     <div><strong>Natureza:</strong> {typeof detail.naturezaOperacao === 'object' ? detail.naturezaOperacao?.id : detail.naturezaOperacao || '—'}</div>
                                                                     <div><strong>Valor da Nota:</strong> R$ {fmt(detail.valorNota)}</div>
                                                                 </div>
