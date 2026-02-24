@@ -2,9 +2,9 @@
 
 # 🥛 NFe Leite
 
-**Automated NFe (Nota Fiscal Eletrônica) management system for dairy producers in Minas Gerais, Brazil**
+**Automated NFe de Entrada (incoming invoice) system for dairy industries purchasing raw milk in Minas Gerais, Brazil**
 
-Streamlines invoice creation and exports data to the **SEFAZ-MG tributary credit spreadsheet** — replacing hours of manual data entry with a single click.
+Streamlines the creation of purchase invoices and exports data to the **SEFAZ-MG tributary credit spreadsheet** — replacing hours of manual data entry with a single click.
 
 [![Live Demo](https://img.shields.io/badge/🔗_Live_Demo-nfe--serramineira.vercel.app-000?style=for-the-badge&logo=vercel&logoColor=white)](https://nfe-serramineira.vercel.app/)
 
@@ -26,13 +26,13 @@ Streamlines invoice creation and exports data to the **SEFAZ-MG tributary credit
 
 ## 📋 About
 
-In the state of **Minas Gerais (Brazil)**, dairy producers who sell raw milk must issue Notas Fiscais Eletrônicas (NFe) for every transaction and report them to **SEFAZ-MG** via a standardized spreadsheet to claim **ICMS tributary credit**.
+In **Minas Gerais (Brazil)**, dairy industries that purchase raw milk from rural producers are required to issue **Notas Fiscais Eletrônicas de Entrada** (incoming electronic invoices) for every acquisition. These invoices must then be reported to **SEFAZ-MG** through a standardized spreadsheet format in order to claim **ICMS tributary credit**.
 
-This process is traditionally done **manually** — copying invoice data field by field into a government-mandated spreadsheet format. **NFe Leite** automates the entire workflow:
+This process is traditionally done **manually** — the operator copies each invoice's data field by field into the government-mandated spreadsheet. **NFe Leite** automates the entire workflow end-to-end:
 
-1. **Create NFe invoices** through the Bling ERP API with pre-calculated tax fields (ICMS, FUNRURAL, incentive surcharges)
+1. **Issue NFe de Entrada** through the Bling ERP API with pre-calculated tax fields (ICMS, FUNRURAL, incentive surcharges) for each milk purchase
 2. **Manage and track** all issued invoices with real-time status from SEFAZ
-3. **Export to Google Sheets** in the exact format required by SEFAZ-MG for tributary credit claims
+3. **Export to Google Sheets** in the exact 14-column format required by SEFAZ-MG for tributary credit claims
 
 > **Real-world impact:** This tool is actively used by a dairy business in Minas Gerais, saving ~4 hours of manual data entry per month.
 
@@ -42,11 +42,11 @@ This process is traditionally done **manually** — copying invoice data field b
 
 | Feature | Description |
 |---|---|
-| **NFe Creation** | Create purchase invoices for raw milk with automatic tax calculations (ICMS 12%, FUNRURAL 1.5%, incentive surcharge 2.5%) |
-| **Contact Lookup** | Searchable dropdown fetching suppliers/producers directly from Bling with address auto-fill |
+| **NFe de Entrada** | Create incoming purchase invoices for raw milk with automatic tax calculations (ICMS 12%, FUNRURAL 1.5%, incentive surcharge 2.5%) |
+| **Producer Lookup** | Searchable dropdown fetching milk producers/suppliers directly from Bling with address and IE (Inscrição Estadual) auto-fill |
 | **Invoice Management** | List, filter, and inspect all NFe with real-time SEFAZ status badges |
 | **SEFAZ Submission** | Send invoices to SEFAZ directly from the interface |
-| **Google Sheets Export** | One-click export to the SEFAZ-MG tributary credit spreadsheet format with all 14 required columns |
+| **Tributary Credit Export** | One-click export to the SEFAZ-MG tributary credit spreadsheet format with all 14 required columns |
 | **OAuth2 Authentication** | Secure Bling OAuth2 flow with automatic token refresh |
 | **Demo Mode** | Full UI walkthrough without API credentials |
 | **Rate Limiting** | Built-in API throttle (3 req/s) to respect Bling API limits |
@@ -59,7 +59,7 @@ This process is traditionally done **manually** — copying invoice data field b
 
 <img src="docs/screenshot-form.png" alt="NFe Creation Form" width="720" />
 
-<p><em>NFe creation form with automatic tax calculation preview</em></p>
+<p><em>NFe de Entrada creation form with automatic tax calculation preview</em></p>
 
 </div>
 
@@ -109,8 +109,8 @@ This process is traditionally done **manually** — copying invoice data field b
 
 ```bash
 # Clone the repository
-git clone https://github.com/ronanpjr/nfe-leite.git
-cd nfe-leite
+git clone https://github.com/ronanpjr/notasfiscais.git
+cd notasfiscais
 
 # Install dependencies
 npm install
@@ -134,7 +134,7 @@ You can explore the full UI **without any API credentials** by clicking **"Explo
 
 ---
 
-## 📊 SEFAZ-MG Export Format
+## 📊 SEFAZ-MG Tributary Credit Export Format
 
 The Google Sheets export produces rows matching the official SEFAZ-MG tributary credit spreadsheet format:
 
@@ -184,7 +184,7 @@ src/
 ├── mockApi.js              # Mock data layer for demo mode
 └── components/
     ├── Login.jsx            # OAuth login with collapsible API config
-    ├── NfeForm.jsx          # NFe creation form with tax preview
+    ├── NfeForm.jsx          # NFe de Entrada creation form with tax preview
     ├── NfeList.jsx          # Invoice list with status badges & actions
     └── SheetsExport.jsx     # Google Sheets export with preview table
 ```
@@ -193,9 +193,9 @@ src/
 
 ## 🚢 Deployment
 
-The project is configured for **Vercel** out of the box:
-
 The app is live at **[nfe-serramineira.vercel.app](https://nfe-serramineira.vercel.app/)**.
+
+The project is configured for **Vercel** out of the box:
 
 ```bash
 # Build for production
