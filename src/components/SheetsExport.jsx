@@ -28,6 +28,15 @@ export default function SheetsExport({ token, showToast }) {
     const [previewRows, setPreviewRows] = useState(null);
     const [includeHeader, setIncludeHeader] = useState(false);
     const [sheetName, setSheetName] = useState(() => getStored('sheets_tab_name', ''));
+
+    // Default to current month
+    const today = new Date();
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
+
+    const [dataInicial, setDataInicial] = useState(firstDay);
+    const [dataFinal, setDataFinal] = useState(lastDay);
+
     const abortRef = useRef(false);
 
     const spreadsheetId = extractSpreadsheetId(sheetsUrl);
@@ -55,7 +64,7 @@ export default function SheetsExport({ token, showToast }) {
         let hasMore = true;
 
         while (hasMore) {
-            const res = await listarNfe(token, { pagina, limite: 100 });
+            const res = await listarNfe(token, { pagina, limite: 100, dataInicial, dataFinal });
             const data = res?.data || [];
             allNotas.push(...data);
             hasMore = data.length >= 100;
@@ -209,8 +218,42 @@ export default function SheetsExport({ token, showToast }) {
                             onChange={(e) => { setSheetName(e.target.value); setStored('sheets_tab_name', e.target.value); }}
                         />
                         <small className="url-status valid" style={{ color: 'var(--text-dim)' }}>
-                            Deixe em branco para usar "Sheet1". Use o nome exato da aba na planilha.
+                            Deixe em branco para usar "Sheet1".
                         </small>
+                    </div>
+
+                    {/* Date Range */}
+                    <div className="form-row dates-row" style={{ display: 'flex', gap: '1rem', marginTop: '1rem', marginBottom: '1rem' }}>
+                        <div className="form-group" style={{ flex: 1 }}>
+                            <label>Data Inicial</label>
+                            <input
+                                type="date"
+                                value={dataInicial}
+                                onChange={(e) => setDataInicial(e.target.value)}
+                                style={{ width: '100%', padding: '0.6rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}
+                            />
+                        </div>
+                        <div className="form-group" style={{ flex: 1 }}>
+                            <label>Data Final</label>
+                            <input
+                                type="date"
+                                value={dataFinal}
+                                onChange={(e) => setDataFinal(e.target.value)}
+                                style={{ width: '100%', padding: '0.6rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Header Checkbox */}
+                    <div className="checkbox-group" style={{ marginBottom: '1.5rem' }}>
+                        <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                            <input
+                                type="checkbox"
+                                checked={includeHeader}
+                                onChange={(e) => setIncludeHeader(e.target.checked)}
+                            />
+                            Incluir linha de cabeçalho
+                        </label>
                     </div>
 
                     {/* Google Config (collapsible) */}
@@ -241,16 +284,6 @@ export default function SheetsExport({ token, showToast }) {
                             </div>
                         )}
                     </div>
-
-                    {/* Header toggle */}
-                    <label className="checkbox-label">
-                        <input
-                            type="checkbox"
-                            checked={includeHeader}
-                            onChange={(e) => setIncludeHeader(e.target.checked)}
-                        />
-                        Incluir linha de cabeçalho
-                    </label>
 
                     {/* Action Buttons */}
                     <div className="export-actions">
@@ -331,6 +364,6 @@ export default function SheetsExport({ token, showToast }) {
                     </div>
                 )}
             </div>
-        </div>
+        </div >
     );
 }
