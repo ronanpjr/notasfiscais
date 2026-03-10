@@ -118,7 +118,7 @@ export function buildPayload({ contato, naturezaOperacaoId, quantidade, valorUni
         despesas,
         itens: [
             {
-                codigo: "01",
+                codigo: "10",
                 descricao: "Leite Cru",
                 unidade: "LT",
                 quantidade: Number(quantidade),
