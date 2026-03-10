@@ -87,7 +87,7 @@ export function buildPayload({ contato, naturezaOperacaoId, quantidade, valorUni
     const { totalProdutos, despesas, icms, funrural } = calcular(quantidade, valorUnitario);
     const agora = nowFormatted();
 
-    const observacoes = `Operação tributada nos termos do art 296 da parte 1 do Anexo VIII do RICMS e o valor acrescentado à operação a título de incentivo à produção e à industrialização do leite 2,5% retenções federais FUNRURAL 1,5% base de cálculo (valor dos produtos) * 1,5% = R$ ${formatCurrency(funrural)}`;
+    const observacoes = `Operação tributada nos termos do art 296 da parte 1 do Anexo VIII do RICMS e o valor acrescentado à operação a título de incentivo à produção e à industrialização do leite 2,5% retenções federais FUNRURAL 1,5% base de cálculo R$ ${formatCurrency(totalProdutos)} * 1,5% = R$ ${formatCurrency(funrural)}`;
 
     const addr = contato.endereco?.geral || {};
 
