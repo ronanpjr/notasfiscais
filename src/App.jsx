@@ -1,14 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { FilePlus, ClipboardList, Droplets, LogOut, AlertTriangle, CheckCircle2, Sheet } from 'lucide-react';
+import { FilePlus, ClipboardList, Droplets, LogOut, AlertTriangle, CheckCircle2, Sheet, Layers } from 'lucide-react';
 import Login from './components/Login.jsx';
 import NfeForm from './components/NfeForm.jsx';
 import NfeList from './components/NfeList.jsx';
 import SheetsExport from './components/SheetsExport.jsx';
+import BulkNfe from './components/BulkNfe.jsx';
 import { exchangeCodeForToken, refreshAccessToken } from './nfeService.js';
 
 const TABS = [
     { id: 'nova', label: '＋ Nova Nota', icon: <FilePlus size={16} /> },
     { id: 'lista', label: 'Minhas Notas', icon: <ClipboardList size={16} /> },
+    { id: 'bulk', label: 'Notas em Lote', icon: <Layers size={16} /> },
     { id: 'exportar', label: 'Exportar', icon: <Sheet size={16} /> },
 ];
 
@@ -139,6 +141,7 @@ export default function App() {
             <main className="main">
                 {tab === 'nova' && <NfeForm token={token} onSuccess={() => { showToast('Nota criada com sucesso!'); setTab('lista'); }} onError={(msg) => showToast(msg, true)} />}
                 {tab === 'lista' && <NfeList token={token} showToast={showToast} />}
+                {tab === 'bulk' && <BulkNfe token={token} showToast={showToast} />}
                 {tab === 'exportar' && <SheetsExport token={token} showToast={showToast} />}
             </main>
 
