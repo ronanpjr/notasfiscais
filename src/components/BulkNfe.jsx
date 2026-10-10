@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
     Layers, Upload, FileText, BarChart3, Send, CheckCircle2,
-    XCircle, Loader, AlertTriangle, Play, Square, Pencil
+    XCircle, Loader, AlertTriangle, Play, Square, Pencil, Search, RefreshCw
 } from 'lucide-react';
 import { calcular, buildPayload, criarNfe, listarContatos, listarNaturezas, obterContato } from '../nfeService.js';
 
@@ -67,6 +67,13 @@ export default function BulkNfe({ token, showToast }) {
 
     const abortRef = useRef(false);
     const fileInputRef = useRef(null);
+    const debounceTimers = useRef({});
+
+    useEffect(() => {
+        return () => {
+            Object.values(debounceTimers.current).forEach(t => clearTimeout(t));
+        };
+    }, []);
 
     const vlr = parseFloat(valorUnitario) || 0;
 
@@ -148,34 +155,121 @@ export default function BulkNfe({ token, showToast }) {
         setDragOver(false);
     }
 
-    // ─── Fetch contacts from Bling by name ────────────
+    // ─── String normalization for search ─────────────
+    function normalizeStr(str) {
+        return (str || '')
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .trim();
+    }
+
+    // ─── Search single contact in Bling ───────────────
+    async function searchContact(id, nameToSearch) {
+        const trimmed = (nameToSearch || '').trim();
+        if (!trimmed) {
+            setContacts(prev => ({
+                ...prev,
+                [id]: { status: CONTACT_STATUS.NOT_FOUND, contato: null, candidates: [] }
+            }));
+            return;
+        }
+
+        setContacts(prev => ({
+            ...prev,
+            [id]: { status: CONTACT_STATUS.LOADING, contato: null, candidates: [] }
+        }));
+
+        try {
+            const res = await listarContatos(token, { pesquisa: trimmed, limite: 10 });
+            const list = res.data || [];
+            const normSearch = normalizeStr(trimmed);
+
+            // 1. Exact match (case & accent insensitive)
+            let found = list.find(c => normalizeStr(c.nome) === normSearch);
+
+            // 2. Substring match
+            if (!found && list.length > 0) {
+                found = list.find(c => {
+                    const normContact = normalizeStr(c.nome);
+                    return normContact.includes(normSearch) || normSearch.includes(normContact);
+                });
+            }
+
+            // 3. Single candidate returned by search
+            if (!found && list.length === 1) {
+                found = list[0];
+            }
+
+            if (found) {
+                setContacts(prev => ({
+                    ...prev,
+                    [id]: { status: CONTACT_STATUS.FOUND, contato: found, candidates: list }
+                }));
+            } else {
+                setContacts(prev => ({
+                    ...prev,
+                    [id]: { status: CONTACT_STATUS.NOT_FOUND, contato: null, candidates: list }
+                }));
+            }
+        } catch {
+            setContacts(prev => ({
+                ...prev,
+                [id]: { status: CONTACT_STATUS.NOT_FOUND, contato: null, candidates: [] }
+            }));
+        }
+    }
+
+    // ─── Fetch contacts on initial JSON load ──────────
     async function fetchContacts(prods) {
         for (const p of prods) {
-            setContacts(prev => ({ ...prev, [p.id]: { status: CONTACT_STATUS.LOADING, contato: null } }));
-            try {
-                const res = await listarContatos(token, { pesquisa: p.nome, limite: 5 });
-                const found = (res.data || []).find(c =>
-                    c.nome?.toLowerCase().trim() === p.nome.toLowerCase().trim()
-                );
-                if (found) {
-                    setContacts(prev => ({ ...prev, [p.id]: { status: CONTACT_STATUS.FOUND, contato: found } }));
-                } else {
-                    setContacts(prev => ({ ...prev, [p.id]: { status: CONTACT_STATUS.NOT_FOUND, contato: null } }));
-                }
-            } catch {
-                setContacts(prev => ({ ...prev, [p.id]: { status: CONTACT_STATUS.NOT_FOUND, contato: null } }));
-            }
+            await searchContact(p.id, p.nome);
         }
+    }
+
+    // ─── Name editing with debounce ───────────────────
+    function handleNameChange(id, newName) {
+        setOverrides(prev => ({
+            ...prev,
+            [id]: { ...prev[id], nome: newName }
+        }));
+
+        if (debounceTimers.current[id]) {
+            clearTimeout(debounceTimers.current[id]);
+        }
+
+        debounceTimers.current[id] = setTimeout(() => {
+            searchContact(id, newName);
+        }, 450);
+    }
+
+    function handleResetName(id, originalName) {
+        setOverrides(prev => {
+            const next = { ...prev };
+            if (next[id]) {
+                const { nome, ...rest } = next[id];
+                next[id] = rest;
+            }
+            return next;
+        });
+
+        if (debounceTimers.current[id]) {
+            clearTimeout(debounceTimers.current[id]);
+        }
+
+        searchContact(id, originalName);
     }
 
     // ─── Computed values per producer ─────────────────
     function getRowValues(p) {
         const ov = overrides[p.id] || {};
+        const nome = ov.nome != null ? ov.nome : p.nome;
         const litros = ov.totalLeite != null ? ov.totalLeite : p.totalLeite;
         const valor = ov.valorUnitario != null ? ov.valorUnitario : vlr;
         const calc = calcular(litros, valor);
-        const isCustomized = ov.totalLeite != null || ov.valorUnitario != null;
-        return { litros, valor, calc, isCustomized };
+        const isNameCustomized = ov.nome != null && ov.nome !== p.nome;
+        const isCustomized = ov.totalLeite != null || ov.valorUnitario != null || isNameCustomized;
+        return { nome, litros, valor, calc, isCustomized, isNameCustomized };
     }
 
     // ─── Overrides ────────────────────────────────────
@@ -251,7 +345,7 @@ export default function BulkNfe({ token, showToast }) {
                     if (cRes?.data) fullContato = { ...contactData, ...cRes.data };
                 } catch { /* use basic data */ }
 
-                const { litros, valor } = getRowValues(p);
+                const { litros, valor, nome } = getRowValues(p);
                 const payload = buildPayload({
                     contato: fullContato,
                     naturezaOperacaoId: selectedNatureza.id,
@@ -270,7 +364,7 @@ export default function BulkNfe({ token, showToast }) {
                     || 'Erro desconhecido ao criar nota fiscal.';
 
                 setSendStatuses(prev => ({ ...prev, [p.id]: { status: SEND_STATUS.ERROR, error: msg } }));
-                setSendError({ produtorId: p.id, produtorNome: p.nome, message: msg, index: i });
+                setSendError({ produtorId: p.id, produtorNome: nome, message: msg, index: i });
                 setPaused(true);
                 return; // Stop execution — user decides
             }
@@ -318,7 +412,7 @@ export default function BulkNfe({ token, showToast }) {
                     if (cRes?.data) fullContato = { ...contactData, ...cRes.data };
                 } catch { /* use basic data */ }
 
-                const { litros, valor } = getRowValues(p);
+                const { litros, valor, nome } = getRowValues(p);
                 const payload = buildPayload({
                     contato: fullContato,
                     naturezaOperacaoId: selectedNatureza.id,
@@ -337,7 +431,7 @@ export default function BulkNfe({ token, showToast }) {
                     || 'Erro desconhecido ao criar nota fiscal.';
 
                 setSendStatuses(prev => ({ ...prev, [p.id]: { status: SEND_STATUS.ERROR, error: msg } }));
-                setSendError({ produtorId: p.id, produtorNome: p.nome, message: msg, index: i });
+                setSendError({ produtorId: p.id, produtorNome: nome, message: msg, index: i });
                 setPaused(true);
                 return;
             }
@@ -531,9 +625,10 @@ export default function BulkNfe({ token, showToast }) {
                                 </thead>
                                 <tbody>
                                     {produtores.map((p) => {
-                                        const { litros, valor, calc, isCustomized } = getRowValues(p);
+                                        const { nome, litros, valor, calc, isCustomized, isNameCustomized } = getRowValues(p);
                                         const isSelected = selected.has(p.id);
-                                        const contactStatus = contacts[p.id]?.status || CONTACT_STATUS.PENDING;
+                                        const contactData = contacts[p.id];
+                                        const contactStatus = contactData?.status || CONTACT_STATUS.PENDING;
                                         const sendStatus = sendStatuses[p.id];
 
                                         return (
@@ -542,6 +637,7 @@ export default function BulkNfe({ token, showToast }) {
                                                 className={`
                                                     ${!isSelected ? 'row-deselected' : ''}
                                                     ${isCustomized ? 'row-customized' : ''}
+                                                    ${isSelected && contactStatus === CONTACT_STATUS.NOT_FOUND ? 'row-not-found-warning' : ''}
                                                     ${sendStatus?.status === SEND_STATUS.SUCCESS ? 'row-success' : ''}
                                                     ${sendStatus?.status === SEND_STATUS.ERROR ? 'row-error' : ''}
                                                 `}
@@ -553,11 +649,47 @@ export default function BulkNfe({ token, showToast }) {
                                                         onChange={() => toggleSelect(p.id)}
                                                     />
                                                 </td>
-                                                <td className="td-nome">
-                                                    {p.nome}
-                                                    {isCustomized && (
-                                                        <Pencil size={10} className="customized-icon" title="Valor personalizado" />
-                                                    )}
+                                                <td className="td-editable td-nome-cell">
+                                                    <div className="nome-input-wrapper">
+                                                        <input
+                                                            type="text"
+                                                            className={`inline-input inline-input-name ${isNameCustomized ? 'input-customized' : ''}`}
+                                                            value={overrides[p.id]?.nome ?? p.nome}
+                                                            onChange={(e) => handleNameChange(p.id, e.target.value)}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter') {
+                                                                    e.target.blur();
+                                                                    searchContact(p.id, e.target.value);
+                                                                }
+                                                            }}
+                                                            title={isNameCustomized ? `Nome original no JSON: ${p.nome}` : 'Edite o nome para pesquisar no Bling'}
+                                                            placeholder="Nome no Bling"
+                                                        />
+                                                        <div className="nome-input-actions">
+                                                            {isNameCustomized && (
+                                                                <button
+                                                                    type="button"
+                                                                    className="btn-reset-name"
+                                                                    onClick={() => handleResetName(p.id, p.nome)}
+                                                                    title={`Restaurar nome original: ${p.nome}`}
+                                                                >
+                                                                    ✕
+                                                                </button>
+                                                            )}
+                                                            <button
+                                                                type="button"
+                                                                className="btn-search-name"
+                                                                onClick={() => searchContact(p.id, overrides[p.id]?.nome ?? p.nome)}
+                                                                title="Pesquisar este nome no Bling"
+                                                            >
+                                                                {contactStatus === CONTACT_STATUS.LOADING ? (
+                                                                    <Loader size={11} className="spin" />
+                                                                ) : (
+                                                                    <Search size={11} />
+                                                                )}
+                                                            </button>
+                                                        </div>
+                                                    </div>
                                                 </td>
                                                 <td className="td-ie">{p.ie}</td>
                                                 <td className="td-editable">
@@ -588,17 +720,71 @@ export default function BulkNfe({ token, showToast }) {
                                                 <td className="td-number td-total">R$ {fmt(calc.totalNota)}</td>
                                                 <td className="td-contact-status">
                                                     {contactStatus === CONTACT_STATUS.LOADING && (
-                                                        <span className="contact-loading"><Loader size={12} className="spin" /></span>
+                                                        <span className="contact-loading"><Loader size={12} className="spin" /> Buscando...</span>
                                                     )}
                                                     {contactStatus === CONTACT_STATUS.FOUND && (
-                                                        <span className="contact-found">
-                                                            <CheckCircle2 size={12} /> Encontrado
-                                                        </span>
+                                                        <div className="contact-status-col">
+                                                            <span className="contact-found" title={`Contato Bling: ${contactData?.contato?.nome} (ID: ${contactData?.contato?.id})`}>
+                                                                <CheckCircle2 size={12} /> {contactData?.contato?.nome || 'Encontrado'}
+                                                            </span>
+                                                            {contactData?.candidates?.length > 1 && (
+                                                                <select
+                                                                    className="contact-select-candidate"
+                                                                    value={contactData.contato?.id || ''}
+                                                                    onChange={(e) => {
+                                                                        const chosen = contactData.candidates.find(c => String(c.id) === e.target.value);
+                                                                        if (chosen) {
+                                                                            setContacts(prev => ({
+                                                                                ...prev,
+                                                                                [p.id]: { ...prev[p.id], contato: chosen, status: CONTACT_STATUS.FOUND }
+                                                                            }));
+                                                                        }
+                                                                    }}
+                                                                    title="Trocar contato selecionado"
+                                                                >
+                                                                    {contactData.candidates.map(c => (
+                                                                        <option key={c.id} value={c.id}>{c.nome}</option>
+                                                                    ))}
+                                                                </select>
+                                                            )}
+                                                        </div>
                                                     )}
                                                     {contactStatus === CONTACT_STATUS.NOT_FOUND && (
-                                                        <span className="contact-not-found">
-                                                            <XCircle size={12} /> Não encontrado
-                                                        </span>
+                                                        <div className="contact-status-col">
+                                                            <span className="contact-not-found" title="Não encontrado no Bling. Altere o nome na coluna ao lado para buscar.">
+                                                                <XCircle size={12} /> Não encontrado
+                                                            </span>
+                                                            {contactData?.candidates?.length > 0 ? (
+                                                                <select
+                                                                    className="contact-select-candidate not-found"
+                                                                    defaultValue=""
+                                                                    onChange={(e) => {
+                                                                        const chosen = contactData.candidates.find(c => String(c.id) === e.target.value);
+                                                                        if (chosen) {
+                                                                            setContacts(prev => ({
+                                                                                ...prev,
+                                                                                [p.id]: { ...prev[p.id], contato: chosen, status: CONTACT_STATUS.FOUND }
+                                                                            }));
+                                                                        }
+                                                                    }}
+                                                                    title="Selecione uma das sugestões encontradas no Bling"
+                                                                >
+                                                                    <option value="" disabled>Vincular a ({contactData.candidates.length} sugestões)...</option>
+                                                                    {contactData.candidates.map(c => (
+                                                                        <option key={c.id} value={c.id}>{c.nome}</option>
+                                                                    ))}
+                                                                </select>
+                                                            ) : (
+                                                                <button
+                                                                    type="button"
+                                                                    className="btn-retry-search"
+                                                                    onClick={() => searchContact(p.id, overrides[p.id]?.nome ?? p.nome)}
+                                                                    title="Buscar este produtor no Bling"
+                                                                >
+                                                                    <RefreshCw size={10} /> Buscar no Bling
+                                                                </button>
+                                                            )}
+                                                        </div>
                                                     )}
                                                     {contactStatus === CONTACT_STATUS.PENDING && (
                                                         <span className="contact-pending">—</span>

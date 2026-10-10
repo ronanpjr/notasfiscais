@@ -198,9 +198,20 @@ export function listarContatos(token, { pagina = 1, limite = 100, pesquisa, tipo
             { id: 123456789, nome: 'Maria Oliveira', numeroDocumento: '987.654.321-00', situacao: 'A' },
             { id: 555111222, nome: 'Carlos Souza', numeroDocumento: '456.789.123-00', situacao: 'A' },
         ];
-        const filtered = pesquisa
+        let filtered = pesquisa
             ? mockContatos.filter(c => c.nome.toLowerCase().includes(pesquisa.toLowerCase()))
             : mockContatos;
+        // In demo mode: if a specific name is searched and not among default mocks,
+        // provide a simulated demo contact so the demo works smoothly with any JSON file!
+        if (pesquisa && filtered.length === 0) {
+            const hash = Math.abs(pesquisa.split('').reduce((acc, char) => (acc << 5) - acc + char.charCodeAt(0), 0)) || 1001;
+            filtered = [{
+                id: 800000000 + (hash % 100000000),
+                nome: pesquisa,
+                numeroDocumento: '000.000.000-00',
+                situacao: 'A'
+            }];
+        }
         return Promise.resolve({ data: filtered });
     }
     const params = new URLSearchParams({ pagina, limite, criterio: 1 });

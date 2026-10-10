@@ -1366,6 +1366,126 @@ body {
 /* Contact status */
 .td-contact-status {
   text-align: center;
+  min-width: 130px;
+}
+
+/* Editable name cell */
+.td-nome-cell {
+  min-width: 170px;
+}
+
+.nome-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.inline-input-name {
+  width: 100%;
+  min-width: 150px;
+  max-width: 230px;
+  text-align: left;
+  padding-right: 2.6rem;
+  font-weight: 500;
+}
+
+.inline-input-name.input-customized {
+  border-color: rgba(245, 158, 11, 0.45);
+  background: rgba(254, 243, 199, 0.3);
+  color: #b45309;
+}
+
+.nome-input-actions {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.btn-search-name,
+.btn-reset-name {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 3px;
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition);
+}
+
+.btn-search-name:hover {
+  color: var(--accent);
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.btn-reset-name:hover {
+  color: var(--danger);
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.btn-retry-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.68rem;
+  font-weight: 500;
+  padding: 2px 6px;
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  color: var(--accent);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.btn-retry-search:hover {
+  background: rgba(59, 130, 246, 0.18);
+}
+
+.row-not-found-warning {
+  background: rgba(239, 68, 68, 0.035) !important;
+}
+
+.row-not-found-warning .inline-input-name {
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.contact-status-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.contact-select-candidate {
+  width: 100%;
+  max-width: 160px;
+  font-size: 0.68rem;
+  padding: 0.18rem 0.35rem;
+  border-radius: 4px;
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--text);
+  cursor: pointer;
+  outline: none;
+  font-family: var(--font);
+}
+
+.contact-select-candidate:focus {
+  border-color: var(--accent);
+}
+
+.contact-select-candidate.not-found {
+  border-color: rgba(239, 68, 68, 0.35);
+  color: var(--danger);
+  background: rgba(254, 242, 242, 0.9);
 }
 
 .contact-found {
